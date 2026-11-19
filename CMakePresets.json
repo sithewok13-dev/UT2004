@@ -175,7 +175,8 @@
     {
       "name": "ios-arm64-release",
       "configurePreset": "ios-arm64",
-      "targets": ["ut_ipa"]
+      "targets": ["ut_ipa"],
+      "nativeToolOptions": ["-k", "0"]
     },
     {
       "name": "web-release",

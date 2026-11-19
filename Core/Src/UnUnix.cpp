@@ -38,6 +38,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <spawn.h>
+#if __APPLE__
+// getentropy, which Linux declares in unistd.h.
+#include <sys/random.h>
+#endif
 
 #if __FILE_NOCASE
 #include <dirent.h>
