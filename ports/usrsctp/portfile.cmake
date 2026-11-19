@@ -9,7 +9,7 @@ vcpkg_from_github(
     PATCHES
         fix_export.patch
         mingw.diff
-        ios-no-route.patch
+        ios.patch
 )
 
 vcpkg_cmake_configure(
