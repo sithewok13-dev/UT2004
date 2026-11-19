@@ -38,10 +38,6 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <spawn.h>
-#if __APPLE__
-// getentropy, which Linux declares in unistd.h.
-#include <sys/random.h>
-#endif
 
 #if __FILE_NOCASE
 #include <dirent.h>
@@ -1722,7 +1718,12 @@ CORE_API FGuid appCreateGuid()
 
 	// Random like CoCreateGuid on Windows, callers use it for secrets too.
 	FGuid Result;
+#if __APPLE__
+	// The iOS SDK doesn't declare getentropy. This takes the same system entropy and cannot fail.
+	arc4random_buf( &Result, sizeof(Result) );
+#else
 	verify( getentropy( &Result, sizeof(Result) )==0 );
+#endif
 	return Result;
 
 	unguard;
