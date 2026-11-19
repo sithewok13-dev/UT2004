@@ -7,6 +7,7 @@
 #include "SDLLaunchContent.h"
 
 #pragma pack(push,8)
+#include <algorithm>
 #include <AL/alc.h>
 #include <AL/alext.h>
 #include <GLES3/gl3.h>
@@ -355,7 +356,8 @@ static bool IsArchive(const char* Name)
 struct FDocumentScan
 {
     const char* Root;
-    char Archive[1024];
+    // Large content comes in parts, as zips of the same folders.
+    std::vector<std::string> Archives;
     char Folder[1024];
 };
 
@@ -367,8 +369,8 @@ static SDL_EnumerationResult SDLCALL ScanDocument(void* User, const char* Dir, c
     SDL_PathInfo Info;
     if (!SDL_GetPathInfo(Path, &Info))
         return SDL_ENUM_CONTINUE;
-    if (Info.type == SDL_PATHTYPE_FILE && !Scan->Archive[0] && IsArchive(Name))
-        SDL_strlcpy(Scan->Archive, Path, sizeof(Scan->Archive));
+    if (Info.type == SDL_PATHTYPE_FILE && IsArchive(Name))
+        Scan->Archives.push_back(Path);
     // A game folder copied in whole. UT2004 is where the content goes, Scripts and Inbox are the app's own.
     else if (Info.type == SDL_PATHTYPE_DIRECTORY && !Scan->Folder[0]
         && SDL_strcasecmp(Name, "UT2004") && SDL_strcasecmp(Name, "Scripts") && SDL_strcasecmp(Name, "Inbox") && HasMaps(Path))
@@ -393,11 +395,9 @@ static SDL_EnumerationResult SDLCALL MoveContentDir(void* User, const char* Dir,
     return SDL_ENUM_CONTINUE;
 }
 
-// Takes the game folder or archive the player copied into the app's Documents folder.
+// Takes the game folder or the archives the player copied into the app's Documents folder.
 static bool InstallFromDocuments(const char* Root, FInstall& I)
 {
-    if (HasMaps(I.Root))
-        return true;
     FDocumentScan Scan = {};
     Scan.Root = Root;
     SDL_EnumerateDirectory(Root, ScanDocument, &Scan);
@@ -409,33 +409,52 @@ static bool InstallFromDocuments(const char* Root, FInstall& I)
     {
         SDL_CreateDirectory(I.Root);
         SDL_EnumerateDirectory(Scan.Folder, MoveContentDir, (void*)I.Root);
+    }
+    if (Scan.Archives.empty())
+    {
         if (HasMaps(I.Root))
             return true;
-    }
-    if (!Scan.Archive[0])
-    {
         SDL_snprintf(I.Err, sizeof(I.Err),
             "No game content was found in the app's folder.\n\n"
             "Open the Files app, go to On My iPhone (or iPad) > UT2004 and copy in the folder of a UT2004 install, the one that holds "
             "Maps and Textures, or a .zip, .tar or .tar.xz archive of it. A computer can copy it there through Finder or iTunes too.");
         return false;
     }
-    I.Src = Scan.Archive;
-    int Fd = open(Scan.Archive, O_RDONLY);
-    if (Fd < 0)
-        return I.Fail("Couldn't open %s.");
-    struct stat St;
-    I.Size = fstat(Fd, &St) == 0 ? (Sint64)St.st_size : 0;
-    I.Verb = "Unpacking the game content";
-    I.Draw();
-    bool Ok = UnpackStream(Fd, I);
-    close(Fd);
-    if (Ok && !I.Files)
-        Ok = I.Fail("No Animations, Maps, Music, Sounds, StaticMeshes or Textures folders were found in %s.");
-    // The archive is several gigabytes the device would keep for nothing.
-    if (Ok)
-        SDL_RemovePath(Scan.Archive);
-    return Ok;
+    // In name order, so the parts of a split download go in their order.
+    std::sort(Scan.Archives.begin(), Scan.Archives.end());
+    char Verb[128];
+    bool Ok = true;
+    for (size_t i = 0; Ok && !SetupQuit && i < Scan.Archives.size(); i++)
+    {
+        const char* Archive = Scan.Archives[i].c_str();
+        I.Src = Archive;
+        int Fd = open(Archive, O_RDONLY);
+        if (Fd < 0)
+        {
+            Ok = I.Fail("Couldn't open %s.");
+            break;
+        }
+        struct stat St;
+        I.Size = fstat(Fd, &St) == 0 ? (Sint64)St.st_size : 0;
+        I.Done = I.Drawn = 0;
+        if (Scan.Archives.size() > 1)
+            SDL_snprintf(Verb, sizeof(Verb), "Unpacking part %d of %d", (int)i + 1, (int)Scan.Archives.size());
+        else
+            SDL_strlcpy(Verb, "Unpacking the game content", sizeof(Verb));
+        I.Verb = Verb;
+        I.Draw();
+        int FilesBefore = I.Files;
+        Ok = UnpackStream(Fd, I);
+        close(Fd);
+        if (Ok && I.Files == FilesBefore)
+            Ok = I.Fail("No Animations, Maps, Music, Sounds, StaticMeshes or Textures folders were found in %s.");
+        // Each archive is gigabytes the device would keep for nothing.
+        if (Ok)
+            SDL_RemovePath(Archive);
+    }
+    // The names die with Scan, the caller records the source as the Documents folder.
+    I.Src = NULL;
+    return Ok && !SetupQuit;
 }
 
 // The content is too large for the app, so the player picks on first launch where it comes from.
