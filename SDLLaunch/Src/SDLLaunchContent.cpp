@@ -11,6 +11,9 @@ bool SetupQuit = false;
 #ifdef __ANDROID__
 static const int SetupWidth = 0, SetupHeight = 0, SetupTextRows = 270;
 static const SDL_WindowFlags SetupFlags = SDL_WINDOW_FULLSCREEN;
+#elif defined(SDL_PLATFORM_IOS)
+static const int SetupWidth = 0, SetupHeight = 0, SetupTextRows = 270;
+static const SDL_WindowFlags SetupFlags = SDL_WINDOW_FULLSCREEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
 #else
 static const int SetupWidth = 800, SetupHeight = 180, SetupTextRows = 90;
 static const SDL_WindowFlags SetupFlags = 0;

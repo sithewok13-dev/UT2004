@@ -705,13 +705,18 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 
 	int Width = Scene.Width, Height = Scene.Height;
 	SDL_GetWindowSizeInPixels(Window,&Width,&Height);
+	// On iOS the window is a framebuffer object SDL made, there is no default one.
+	GLuint WindowFramebuffer = 0;
+#ifdef SDL_PLATFORM_IOS
+	WindowFramebuffer = (GLuint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
+#endif
 	// Depth is not needed past the frame and the copy covers the whole window.
-	GLenum DepthStencil = GL_DEPTH_STENCIL_ATTACHMENT, Color = GL_COLOR;
+	GLenum DepthStencil = GL_DEPTH_STENCIL_ATTACHMENT, Color = WindowFramebuffer ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
 	glBindFramebuffer(GL_FRAMEBUFFER,Scene.Framebuffer);
 	glInvalidateFramebuffer(GL_FRAMEBUFFER,1,&DepthStencil);
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
+	glBindFramebuffer(GL_FRAMEBUFFER,WindowFramebuffer);
 	glInvalidateFramebuffer(GL_FRAMEBUFFER,1,&Color);
-	DrawFullscreen(CopyProgram,0,Width,Height,Scene.Texture);
+	DrawFullscreen(CopyProgram,WindowFramebuffer,Width,Height,Scene.Texture);
 
 	SDL_GL_SwapWindow(Window);
 

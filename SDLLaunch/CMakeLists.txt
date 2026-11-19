@@ -1,4 +1,4 @@
-if(WIN32 OR EMSCRIPTEN)
+if(WIN32 OR IOS OR EMSCRIPTEN)
   set(SDLLAUNCH_OUTPUT UT2004)
 else()
   set(SDLLAUNCH_OUTPUT ut2004-bin)
@@ -18,9 +18,15 @@ if(WIN32)
   target_link_options(SDLLaunch PRIVATE /ENTRY:mainCRTStartup)
 endif()
 if(ANDROID)
-  target_sources(SDLLaunch PRIVATE Src/SDLLaunchAndroid.cpp)
+  target_sources(SDLLaunch PRIVATE Src/SDLLaunchAndroid.cpp Src/SDLLaunchTar.cpp)
   # System and script files ship xz compressed inside the APK, the content comes as a .tar.xz on first run.
   target_link_libraries(SDLLaunch PRIVATE LibLZMA::LibLZMA)
+endif()
+if(IOS)
+  # The content comes as a .tar.xz on first run, or as an archive the player puts in the app's folder.
+  target_sources(SDLLaunch PRIVATE Src/SDLLaunchIOS.cpp Src/SDLLaunchTar.cpp)
+  target_link_libraries(SDLLaunch PRIVATE LibLZMA::LibLZMA OpenSSL::SSL)
+  target_include_directories(SDLLaunch PRIVATE ${GLES3_INCLUDE_DIR})
 endif()
 if(NOT EMSCRIPTEN)
   # Both are C libraries, so unlike IpDrv's C++ ones they are safe in the executable before the allocator is set.
@@ -49,8 +55,9 @@ if(NOT EMSCRIPTEN)
   target_compile_definitions(SDLLaunch PRIVATE UT_ASSETS_URL="${UT_ASSETS_URL}" UT_ASSETS_SHA256="${UT_ASSETS_SHA256}"
     UT_FULL_URL="${UT_FULL_URL}" UT_FULL_SHA256="${UT_FULL_SHA256}" UT_FULL_SIZE=${UT_FULL_SIZE}LL UT_FULL_UNPACKED=${UT_FULL_UNPACKED}LL)
 endif()
-if(EMSCRIPTEN)
-  # appGetDllHandle can't dlsym in a browser, so it looks the linked packages up in this table.
+if(EMSCRIPTEN OR IOS)
+  # appGetDllHandle can't dlsym in a browser, and on iOS the linker would drop the unreferenced symbols,
+  # so it looks the linked packages up in this table.
   get_property(pkgs GLOBAL PROPERTY UT_LINKED_PACKAGES)
   set(decls "")
   set(checks "")
@@ -60,7 +67,10 @@ if(EMSCRIPTEN)
   endforeach()
   file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/LinkedPackages.cpp CONTENT
     "#include <string.h>\n${decls}extern \"C\" void* appLinkedPackage(const char* Symbol)\n{\n${checks}\treturn 0;\n}\n")
-  target_sources(SDLLaunch PRIVATE Src/SDLLaunchWeb.cpp ${CMAKE_CURRENT_BINARY_DIR}/LinkedPackages.cpp)
+  target_sources(SDLLaunch PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/LinkedPackages.cpp)
+endif()
+if(EMSCRIPTEN)
+  target_sources(SDLLaunch PRIVATE Src/SDLLaunchWeb.cpp)
 
   set(webrtc ${CMAKE_SOURCE_DIR}/Emscripten/webrtc.js)
   set(content ${CMAKE_SOURCE_DIR}/Emscripten/content.js)

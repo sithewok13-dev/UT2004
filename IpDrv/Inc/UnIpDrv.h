@@ -47,6 +47,11 @@ Revision history:
 	#include <pthread.h>
 	#include <fcntl.h>
 
+	// Apple has no such flag and 0x4000 means something else there. The process ignores SIGPIPE anyway.
+	#if __APPLE__ && !defined(MSG_NOSIGNAL)
+	#define MSG_NOSIGNAL 0
+	#endif
+
 	// Handle glibc < 2.1.3
 	#ifndef MSG_NOSIGNAL
 	#define MSG_NOSIGNAL 0x4000

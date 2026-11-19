@@ -6,7 +6,11 @@
 		* Created by Tim Sweeney
 =============================================================================*/
 
+#if __APPLE__
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
 
 // Tags.
 enum {MEM_PreTag =0xf0ed1cee};

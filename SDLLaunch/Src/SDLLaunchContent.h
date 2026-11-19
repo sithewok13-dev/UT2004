@@ -43,5 +43,8 @@ SDL_IOStream* CreateContentFile(const char* Dest);
 // Zip keeps its index at the end, so the stream has to seek.
 bool Unzip(SDL_IOStream* Zip, FInstall& I);
 
+// SDLLaunchTar.cpp, Android and iOS. Unpacks a .tar.xz or .tar read from Fd, or the zip archive at I.Src, into I.Root.
+bool UnpackStream(int Fd, FInstall& I);
+
 // HttpFile.cpp. Downloads UT_FULL_URL next to the content folders, resuming an earlier attempt, checks it and unpacks it.
 bool InstallFull(FInstall& I);

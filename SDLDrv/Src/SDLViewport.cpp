@@ -1563,8 +1563,8 @@ UBOOL USDLViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY, 
 	// Set new info.
 	BlitFlags = NewBlitFlags & ~BLIT_ParameterFlags;
 
-#ifdef __ANDROID__
-	// The launcher's splash window becomes the game window, Android has only one.
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
+	// The launcher's splash window becomes the game window, phones have only one.
 	if( !Client->Window )
 	{
 		SDL_Window** Windows = SDL_GetWindows( NULL );
