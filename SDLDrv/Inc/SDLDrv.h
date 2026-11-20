@@ -211,6 +211,10 @@ class USDLViewport : public UViewport
 	void VJWrite( INT i, UBOOL Held, FLOAT X, FLOAT Y );
 	void VJRelease();
 	void SwitchVirtualJoystick( UBOOL On );
+#if __IOS__
+	// SDLTouchIOS.cpp: the iOS touch overlay, once a frame.
+	void IOSTouchFrame( UBOOL InMenu );
+#endif
 	INT VehicleSeats( INT& Seat );
 
 	virtual UBOOL TryRenderDevice( const TCHAR* ClassName, INT NewX, INT NewY, UBOOL Fullscreen );
