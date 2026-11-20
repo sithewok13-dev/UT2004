@@ -41,8 +41,18 @@ void InitSplash(const TCHAR *filename)
 {
     debugf(TEXT("iOS: splash %s"), filename ? filename : TEXT("(none)"));
     SDL_Surface *bmp = filename ? SDL_LoadBMP(appToAnsi(filename)) : NULL;
+    // The engine finds files whatever their case, SDL doesn't, and the iPhone's file system tells cases apart.
+    // The logo ships as Help/ut2004logo.bmp while the engine asks for UT2004Logo.bmp.
+    if (bmp == NULL && filename)
+    {
+        FString Path(filename);
+        INT Slash = Path.InStr(TEXT("/"), 1);
+        FString Lower = Path.Left(Slash + 1) + Path.Mid(Slash + 1).Locs();
+        bmp = SDL_LoadBMP(appToAnsi(*Lower));
+    }
     if (bmp == NULL || !SDL_Init(SDL_INIT_VIDEO))
     {
+        debugf(TEXT("iOS: no splash: %s"), appFromAnsi(SDL_GetError()));
         SDL_DestroySurface(bmp);
         return;
     }

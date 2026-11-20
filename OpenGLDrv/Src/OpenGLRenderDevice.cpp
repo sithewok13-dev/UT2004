@@ -261,8 +261,21 @@ void UOpenGLRenderDevice::ResetStateCache()
 	appMemset(GL.Samplers,0xff,sizeof(GL.Samplers));
 }
 
+#ifdef SDL_PLATFORM_IOS
+// The framebuffer SDL's view drew into when the context was made, in case the window property lacks it.
+static GLint GIOSViewFramebuffer = 0;
+static INT GIOSFramesLogged = 0;
+#endif
+
 UBOOL UOpenGLRenderDevice::InitContext()
 {
+#ifdef SDL_PLATFORM_IOS
+	// Nothing of the engine's is bound yet, so this is SDL's.
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING,&GIOSViewFramebuffer);
+	GIOSFramesLogged = 0;
+	debugf(TEXT("iOS: view framebuffer %i, window property %i"),GIOSViewFramebuffer,
+		(INT)SDL_GetNumberProperty(SDL_GetWindowProperties(SDL_GL_GetCurrentWindow()),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,-1));
+#endif
 	debugf(TEXT("GL_VENDOR     : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_VENDOR)));
 	debugf(TEXT("GL_RENDERER   : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_RENDERER)));
 	debugf(TEXT("GL_VERSION    : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_VERSION)));
@@ -709,6 +722,8 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 	GLuint WindowFramebuffer = 0;
 #ifdef SDL_PLATFORM_IOS
 	WindowFramebuffer = (GLuint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
+	if( !WindowFramebuffer )
+		WindowFramebuffer = (GLuint)GIOSViewFramebuffer;
 #endif
 	// Depth is not needed past the frame and the copy covers the whole window.
 	GLenum DepthStencil = GL_DEPTH_STENCIL_ATTACHMENT, Color = WindowFramebuffer ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
@@ -717,6 +732,31 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 	glBindFramebuffer(GL_FRAMEBUFFER,WindowFramebuffer);
 	glInvalidateFramebuffer(GL_FRAMEBUFFER,1,&Color);
 	DrawFullscreen(CopyProgram,WindowFramebuffer,Width,Height,Scene.Texture);
+
+#ifdef SDL_PLATFORM_IOS
+	if( GIOSFramesLogged < 3 )
+	{
+		GIOSFramesLogged++;
+		glBindFramebuffer(GL_FRAMEBUFFER,WindowFramebuffer);
+		GLint RenderbufferWidth = 0, RenderbufferHeight = 0;
+		glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,&RenderbufferWidth);
+		GLint Type = RenderbufferWidth;
+		RenderbufferWidth = 0;
+		GLint Renderbuffer = (GLint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0);
+		if( Renderbuffer )
+		{
+			glBindRenderbuffer(GL_RENDERBUFFER,Renderbuffer);
+			glGetRenderbufferParameteriv(GL_RENDERBUFFER,GL_RENDERBUFFER_WIDTH,&RenderbufferWidth);
+			glGetRenderbufferParameteriv(GL_RENDERBUFFER,GL_RENDERBUFFER_HEIGHT,&RenderbufferHeight);
+		}
+		int PointsX = 0, PointsY = 0;
+		SDL_GetWindowSize(Window,&PointsX,&PointsY);
+		debugf(TEXT("iOS: present %i into framebuffer %i (status 0x%x, attachment type 0x%x, renderbuffer %i at %ix%i), window %ix%i pixels %ix%i points, scene %ix%i, flags 0x%llx, GL error 0x%x"),
+			GIOSFramesLogged,WindowFramebuffer,glCheckFramebufferStatus(GL_FRAMEBUFFER),Type,Renderbuffer,RenderbufferWidth,RenderbufferHeight,
+			Width,Height,PointsX,PointsY,Scene.Width,Scene.Height,(unsigned long long)SDL_GetWindowFlags(Window),glGetError());
+		GL.Framebuffer = WindowFramebuffer;
+	}
+#endif
 
 	SDL_GL_SwapWindow(Window);
 
