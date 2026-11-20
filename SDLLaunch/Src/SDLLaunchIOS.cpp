@@ -15,7 +15,10 @@
 #include <openssl/evp.h>
 #pragma pack(pop)
 #include <errno.h>
+#include <execinfo.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include "SDLLaunchPrivate.h"
@@ -102,8 +105,76 @@ static bool SDLCALL WatchApp(void*, SDL_Event* Event)
 }
 
 // iOS ends an app that uses OpenGL in the background, so the frame loop waits here until it is back.
+/*-----------------------------------------------------------------------------
+	Hang watchdog.
+-----------------------------------------------------------------------------*/
+
+// When no frame starts for 5 seconds, the main thread writes where it is to System/Hang.log and
+// carries on. A frozen picture with the sound still playing is the main thread stuck somewhere.
+static SDL_AtomicU32 FrameTicks;
+static pthread_t MainThread;
+static int HangFd = -1;
+
+static void WriteHang(const char* Text)
+{
+    if (HangFd >= 0)
+        write(HangFd, Text, SDL_strlen(Text));
+}
+
+// Runs on the main thread, interrupting whatever it was stuck in. backtrace_symbols_fd doesn't allocate.
+static void HangSignal(int)
+{
+    void* Frames[96];
+    int Count = backtrace(Frames, SDL_arraysize(Frames));
+    WriteHang("Main thread:\n");
+    backtrace_symbols_fd(Frames, Count, HangFd);
+    WriteHang("\n");
+}
+
+static int SDLCALL RunWatchdog(void*)
+{
+    Uint32 Reported = 0;
+    int Times = 0;
+    for (;;)
+    {
+        SDL_Delay(1000);
+        Uint32 Last = SDL_GetAtomicU32(&FrameTicks), Now = (Uint32)SDL_GetTicks();
+        if (!Last || Now - Last < 5000 || SDL_GetAtomicInt(&InBackground))
+            continue;
+        // Once 5 s into a stall and again at 20 s, to tell a stall that moves from one that doesn't.
+        if (Reported != Last)
+            Reported = Last, Times = 0;
+        if (Times == 2 || (Times == 1 && Now - Last < 20000))
+            continue;
+        Times++;
+        char Line[160];
+        SDL_snprintf(Line, sizeof(Line), "No frame for %u ms (%u s after start), report %d:\n", Now - Last, Now / 1000, Times);
+        WriteHang(Line);
+        pthread_kill(MainThread, SIGUSR2);
+    }
+    return 0;
+}
+
+static void StartWatchdog()
+{
+    MainThread = pthread_self();
+    HangFd = open("Hang.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    struct sigaction Action = {};
+    Action.sa_handler = HangSignal;
+    sigemptyset(&Action.sa_mask);
+    Action.sa_flags = SA_RESTART;
+    sigaction(SIGUSR2, &Action, NULL);
+    SDL_DetachThread(SDL_CreateThread(RunWatchdog, "Watchdog", NULL));
+}
+
+/*-----------------------------------------------------------------------------
+	Background.
+-----------------------------------------------------------------------------*/
+
 void WaitWhileInBackground()
 {
+    // Called at the start of every frame.
+    SDL_SetAtomicU32(&FrameTicks, (Uint32)SDL_GetTicks() | 1);
     if (!SDL_GetAtomicInt(&InBackground))
         return;
     if (SDL_GL_GetCurrentContext())
@@ -566,5 +637,6 @@ bool IOSSetup()
     SDL_snprintf(SystemDir, sizeof(SystemDir), "%s/UT2004/System", Root);
     if (chdir(SystemDir) != 0)
         return IOSFail("Couldn't open %s.", SystemDir);
+    StartWatchdog();
     return true;
 }
