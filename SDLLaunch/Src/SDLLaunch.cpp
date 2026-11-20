@@ -495,7 +495,12 @@ inline void	CMainLoop::RunLoop(void)
 			// Sleep alone wakes up to a millisecond late.
 			DOUBLE Delta = 1.0 / MaxTickRate - (appSeconds() - OldTime);
 			if( Delta > 0.0 )
+#if __IOS__
+				// A sleep would hold the touches back, see UnIOS.cpp.
+				appSleep( (FLOAT)Delta );
+#else
 				SDL_DelayPrecise( (Uint64)(Delta * 1000000000.0) );
+#endif
 		}
 	}
 #endif

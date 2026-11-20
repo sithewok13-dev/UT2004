@@ -751,9 +751,9 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 		}
 		int PointsX = 0, PointsY = 0;
 		SDL_GetWindowSize(Window,&PointsX,&PointsY);
-		debugf(TEXT("iOS: present %i into framebuffer %i (status 0x%x, attachment type 0x%x, renderbuffer %i at %ix%i), window %ix%i pixels %ix%i points, scene %ix%i, flags 0x%llx, GL error 0x%x"),
+		debugf(TEXT("iOS: present %i into framebuffer %i (status 0x%x, attachment type 0x%x, renderbuffer %i at %ix%i), window %ix%i pixels %ix%i points, scene %ix%i, flags 0x%x, GL error 0x%x"),
 			GIOSFramesLogged,WindowFramebuffer,glCheckFramebufferStatus(GL_FRAMEBUFFER),Type,Renderbuffer,RenderbufferWidth,RenderbufferHeight,
-			Width,Height,PointsX,PointsY,Scene.Width,Scene.Height,(unsigned long long)SDL_GetWindowFlags(Window),glGetError());
+			Width,Height,PointsX,PointsY,Scene.Width,Scene.Height,(DWORD)SDL_GetWindowFlags(Window),glGetError());
 		GL.Framebuffer = WindowFramebuffer;
 	}
 #endif

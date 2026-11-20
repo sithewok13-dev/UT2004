@@ -127,7 +127,7 @@ void WaitWhileInBackground()
     while (SDL_GetAtomicInt(&InBackground) && !GIsRequestingExit)
     {
         SDL_PumpEvents();
-        SDL_Delay(50);
+        appSleep(0.05f);
     }
     if (Pause && Resume)
         Resume(Device);

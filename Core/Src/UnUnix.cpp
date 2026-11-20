@@ -1528,12 +1528,22 @@ CORE_API void appSystemTime( INT& Year, INT& Month, INT& DayOfWeek, INT& Day, IN
 	unguard;
 }
 
+#if __IOS__
+// UnIOS.cpp
+extern "C" void appIOSWait( double Seconds );
+#endif
+
 CORE_API void appSleep( FLOAT Seconds )
 {
 	guard(appSleep);
 
+#if __IOS__
+	// On the main thread a sleep would hold the touches back.
+	appIOSWait( Seconds );
+#else
 	INT SleepTime = (INT) (Seconds * 1000000);
 	usleep( SleepTime );
+#endif
 
 	unguard;
 }
