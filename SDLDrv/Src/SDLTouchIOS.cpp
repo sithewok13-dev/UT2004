@@ -119,6 +119,13 @@ static void ListWeapons( APawn* Pawn, IOSTouchWeapons& L )
 	L.uList = Hash ? Hash : 1;
 }
 
+// Whether an object's script is in this state.
+static UBOOL InState( UObject* Object, FName State )
+{
+	FStateFrame* Frame = Object ? Object->GetStateFrame() : NULL;
+	return Frame && Frame->StateNode && Frame->StateNode->GetFName() == State;
+}
+
 // A key pressed and let go, as a bound key would be.
 static void TapKey( USDLViewport* Viewport, EInputKey Key )
 {
@@ -154,7 +161,7 @@ void USDLViewport::IOSTouchFrame( UBOOL InMenu )
 	if( !InMenu && PC && Client->Window )
 	{
 		static FName Dead( TEXT("Dead") ), Waiting( TEXT("PlayerWaiting") ), Spectating( TEXT("Spectating") ), WaitingForPawn( TEXT("WaitingForPawn") );
-		UBOOL Playing = Pawn || PC->IsInState(Dead) || PC->IsInState(Waiting) || PC->IsInState(Spectating) || PC->IsInState(WaitingForPawn);
+		UBOOL Playing = Pawn || InState(PC, Dead) || InState(PC, Waiting) || InState(PC, Spectating) || InState(PC, WaitingForPawn);
 		if( ConsoleOpen )
 			Mode = IOSTOUCH_CONSOLE;
 		else if( PC->Level && PC->Level->Pauser )
