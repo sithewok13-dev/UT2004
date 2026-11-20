@@ -39,6 +39,7 @@ static bool IOSFail(const char* Fmt, const char* Arg)
 // The renderer is OpenGL ES (see main), so the window is made for the GL ES 3 context OpenGLDrv asks for.
 void InitSplash(const TCHAR *filename)
 {
+    debugf(TEXT("iOS: splash %s"), filename ? filename : TEXT("(none)"));
     SDL_Surface *bmp = filename ? SDL_LoadBMP(appToAnsi(filename)) : NULL;
     if (bmp == NULL || !SDL_Init(SDL_INIT_VIDEO))
     {
@@ -65,7 +66,10 @@ void InitSplash(const TCHAR *filename)
         SDL_RenderTexture(renderer, texture, NULL, &dest);
         SDL_RenderPresent(renderer);
         SDL_DestroyTexture(texture);
+        debugf(TEXT("iOS: splash shown, %ix%i pixels, renderer %s"), w, h, appFromAnsi(SDL_GetRendererName(renderer)));
     }
+    else
+        debugf(TEXT("iOS: no splash window: %s"), appFromAnsi(SDL_GetError()));
     SDL_DestroySurface(bmp);
 }
 
@@ -109,6 +113,7 @@ void WaitWhileInBackground()
     }
     if (Pause && Resume)
         Pause(Device);
+    debugf(TEXT("iOS: in the background, waiting"));
     while (SDL_GetAtomicInt(&InBackground) && !GIsRequestingExit)
     {
         SDL_PumpEvents();
@@ -116,6 +121,7 @@ void WaitWhileInBackground()
     }
     if (Pause && Resume)
         Resume(Device);
+    debugf(TEXT("iOS: back in the foreground"));
 }
 
 /*-----------------------------------------------------------------------------

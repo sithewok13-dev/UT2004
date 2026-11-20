@@ -177,6 +177,10 @@ public:
 					OutputDebugString(Temp);
 #endif
 #endif
+#if __IOS__
+					// iOS ends a hung or backgrounded app without a chance to flush, so every line goes to disk at once.
+					LogAr->Flush();
+#endif
 				}
 				if( GLogHook )
 					GLogHook->Serialize( Data, Event );
