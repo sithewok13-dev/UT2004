@@ -14,6 +14,10 @@
 #include <fstream>
 #include <sstream>
 #endif
+#if __IOS__
+// AppleTrust.cpp
+CURLcode AppleSslContext(CURL*, void* SslCtx, void*);
+#endif
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <memory>
@@ -139,6 +143,8 @@ static bool HttpRequest( const std::string& Url, const std::string& Body, std::s
 #if __ANDROID__
 	curl_blob Ca = { (void*)AndroidCaCerts().data(), AndroidCaCerts().size(), CURL_BLOB_NOCOPY };
 	curl_easy_setopt( Curl, CURLOPT_CAINFO_BLOB, &Ca );
+#elif __IOS__
+	curl_easy_setopt( Curl, CURLOPT_SSL_CTX_FUNCTION, AppleSslContext );
 #endif
 	curl_easy_setopt( Curl, CURLOPT_WRITEFUNCTION, AppendResponse );
 	curl_easy_setopt( Curl, CURLOPT_WRITEDATA, &Response );

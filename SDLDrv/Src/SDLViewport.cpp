@@ -1007,6 +1007,10 @@ void USDLViewport::UpdateCursor( UBOOL InMenu )
 	// UGameEngine::Tick releases and restores the grab for them.
 	// The on-screen controls show in game only, opening a menu lets go of them.
 	UBOOL ShowVJ = USDLClient::VirtualPad && !InMenu;
+#if __IOS__
+	// The iOS touch overlay takes the place of these controls (SDLTouchIOS.cpp).
+	ShowVJ = 0;
+#endif
 	if( bShowWindowsMouse != WindowsMouseShown || ShowVJ != VJShown )
 	{
 		WindowsMouseShown = bShowWindowsMouse;
@@ -1262,6 +1266,9 @@ void USDLViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 	UpdateGamepad( InMenu, DeltaSeconds );
 	UpdateCursor( InMenu );
 	UpdateTextInput( InMenu );
+#if __IOS__
+	IOSTouchFrame( InMenu );
+#endif
 
 	// Mouse movement management.
 	UBOOL MouseMoved = false;
@@ -1563,8 +1570,8 @@ UBOOL USDLViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY, 
 	// Set new info.
 	BlitFlags = NewBlitFlags & ~BLIT_ParameterFlags;
 
-#ifdef __ANDROID__
-	// The launcher's splash window becomes the game window, Android has only one.
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
+	// The launcher's splash window becomes the game window, phones have only one.
 	if( !Client->Window )
 	{
 		SDL_Window** Windows = SDL_GetWindows( NULL );

@@ -15,6 +15,9 @@
 #if __ANDROID__
 // IpDrv/Src/WebMaster.cpp
 const std::string& AndroidCaCerts();
+#elif __IOS__
+// IpDrv/Src/AppleTrust.cpp
+CURLcode AppleSslContext(CURL*, void* SslCtx, void*);
 #endif
 
 // The download as a file, kept between attempts and launches so several gigabytes go on where they stopped.
@@ -59,6 +62,8 @@ static bool Download(const char* Url, Sint64 ResumeFrom, FPartFile& Part, char* 
 #if __ANDROID__
     curl_blob Ca = { (void*)AndroidCaCerts().data(), AndroidCaCerts().size(), CURL_BLOB_NOCOPY };
     curl_easy_setopt(Curl, CURLOPT_CAINFO_BLOB, &Ca);
+#elif __IOS__
+    curl_easy_setopt(Curl, CURLOPT_SSL_CTX_FUNCTION, AppleSslContext);
 #endif
     curl_easy_setopt(Curl, CURLOPT_WRITEFUNCTION, WritePart);
     curl_easy_setopt(Curl, CURLOPT_WRITEDATA, &Part);

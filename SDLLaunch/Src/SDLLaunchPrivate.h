@@ -16,7 +16,11 @@ Revision history:
 #include <errno.h>
 #include <sys/stat.h>
 
+#if __APPLE__
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
 
 #include <fcntl.h>
 #include "Engine.h"
@@ -31,6 +35,11 @@ bool AndroidFail(const char* Fmt, const char* Arg);
 bool ExtractAssets(const char* Root);
 bool InstallContent(const char* Root);
 void StartServerService(const TCHAR* Cmd);
+#elif __IOS__
+// SDLLaunchIOS.cpp
+void InitSplash(const TCHAR *filename);
+bool IOSSetup();
+void WaitWhileInBackground();
 #elif __EMSCRIPTEN__
 // SDLLaunchWeb.cpp
 extern FOutputDevice* GWebLogHook;

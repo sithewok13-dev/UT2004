@@ -9,6 +9,11 @@ if(WIN32)
     DEPS Vorbis::vorbisfile winmm shlwapi)
 else()
   ut_module(Core SHARED SOURCES ${CORE_SRC} UnUnix.cpp DEPS Vorbis::vorbisfile)
+  if(IOS)
+    # Waits that keep the run loop going, so touches arrive on time (UnIOS.cpp).
+    target_sources(Core PRIVATE Src/UnIOS.cpp)
+    target_link_libraries(Core PUBLIC "-framework CoreFoundation")
+  endif()
 endif()
 
 # Read at configure time, so the log of a build names the commit it was configured at.

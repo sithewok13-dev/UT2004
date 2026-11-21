@@ -23,7 +23,11 @@
 #include <errno.h>
 #include <time.h>
 
+#if __APPLE__
+#include <stdlib.h>
+#else
 #    include <malloc.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 

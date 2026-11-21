@@ -375,7 +375,7 @@ UBOOL SetSocketLinger( INT Socket )
 
 UBOOL SetSocketRecvErr( INT Socket )
 {
-#ifdef LINUX
+#ifdef __linux__
 	int on = 1;
 	return setsockopt(Socket, SOL_IP, IP_RECVERR, &on, sizeof (on)) == 0;
 #else

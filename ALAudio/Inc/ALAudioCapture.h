@@ -16,8 +16,11 @@
 #include "ALAudio.h"
 
 // OpenAL is loaded at runtime through ALFuncs.h, only its types and constants come from the headers.
+// Where it is linked in, ALAudioSubsystem.h takes the prototypes, so they must not be switched off here.
+#if !__EMSCRIPTEN__ && !__IOS__
 #define AL_NO_PROTOTYPES
 #define ALC_NO_PROTOTYPES
+#endif
 #include "AL/al.h"
 #include "AL/alc.h"
 

@@ -43,6 +43,7 @@ jobs:
           - { name: linux-arm64, os: ubuntu-22.04-arm, preset: linux64, build: linux64-release }
           - { name: web, os: ubuntu-24.04, preset: web, build: web-release }
           - { name: android, os: ubuntu-24.04, preset: android-arm64, build: android-arm64-release }
+          - { name: ios, os: macos-15, preset: ios-arm64, build: ios-arm64-release }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -62,6 +63,10 @@ jobs:
       - name: Ninja
         if: matrix.name == 'web' || matrix.name == 'android'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+      - name: Build tools
+        # Some vcpkg ports build with autotools.
+        if: matrix.name == 'ios'
+        run: brew install ninja pkg-config autoconf automake libtool
 
       - name: vcpkg cache
         if: "!startsWith(matrix.name, 'linux')"
@@ -142,11 +147,13 @@ jobs:
               cpack --config build/linux64/CPackConfig.cmake -C Release -G TGZ -B out/pack -D CPACK_PACKAGE_FILE_NAME=$ARCHIVE ;;
             web) (cd build/web/site && zip -r ../../../out/$ARCHIVE.zip .) ;;
             android) cp build/android-arm64/UT2004.apk out/$ARCHIVE.apk ;;
+            # Unsigned, a sideloading tool signs it for the player's device.
+            ios) cp build/ios-arm64/UT2004.ipa out/$ARCHIVE.ipa ;;
           esac
           if [ -d out/pack ]; then mv out/pack/$ARCHIVE.* out/ && rm -r out/pack; fi
       - name: Check the archive for build leftovers
-        # An APK keeps its packed files under assets/ by design.
-        if: matrix.name != 'android'
+        # An APK keeps its packed files under assets/ by design, an IPA has no build folder to leak.
+        if: matrix.name != 'android' && matrix.name != 'ios'
         run: |
           # The installer packs the same folder as the zip.
           f=$(ls out/*.zip out/*.tar.gz 2>/dev/null || true)

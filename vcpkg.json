@@ -6,13 +6,14 @@
     { "name": "openal-soft", "platform": "!emscripten" },
     "bullet3",
     "libsquish",
-    { "name": "speex", "platform": "windows | android | emscripten" },
-    { "name": "speexdsp", "platform": "windows | android | emscripten" },
-    { "name": "liblzma", "platform": "android" },
+    { "name": "speex", "platform": "windows | android | ios | emscripten" },
+    { "name": "speexdsp", "platform": "windows | android | ios | emscripten" },
+    { "name": "liblzma", "platform": "android | ios" },
     { "name": "angle", "platform": "windows" },
-    { "name": "libdatachannel", "default-features": false, "platform": "windows | android" },
-    { "name": "nlohmann-json", "platform": "windows | android | emscripten" },
-    { "name": "curl", "platform": "windows | android" }
+    { "name": "opengl-registry", "platform": "ios" },
+    { "name": "libdatachannel", "default-features": false, "platform": "windows | android | ios" },
+    { "name": "nlohmann-json", "platform": "windows | android | ios | emscripten" },
+    { "name": "curl", "platform": "windows | android | ios", "features": [{ "name": "openssl", "platform": "ios" }] }
   ],
   "overrides": [
     { "name": "libdatachannel", "version": "0.24.6" },

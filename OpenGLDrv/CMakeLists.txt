@@ -3,6 +3,9 @@ ut_module(OpenGLDrv SHARED
   PCH OpenGLDrv.h OpenGLDrv.cpp
   DEPS Engine)
 target_link_libraries(OpenGLDrv PRIVATE SDL3::SDL3 ${GLES_TARGET} ${SQUISH_TARGET})
+if(IOS)
+  target_include_directories(OpenGLDrv PRIVATE ${GLES3_INCLUDE_DIR})
+endif()
 if(WIN32)
   # CMake copies no runtime DLLs on its own, and SDL loads libEGL by name.
   add_custom_command(TARGET OpenGLDrv POST_BUILD
