@@ -126,6 +126,18 @@ static UBOOL InState( UObject* Object, FName State )
 	return Frame && Frame->StateNode && Frame->StateNode->GetFName() == State;
 }
 
+// Fingers lifted off the screen, counted by MouseButtonEvent.
+DWORD GIOSScreenTaps = 0;
+
+// Whether an object is of a script class with this name, or one under it.
+static UBOOL IsClassNamed( UObject* Object, const TCHAR* Name )
+{
+	for( UClass* Class = Object ? Object->GetClass() : NULL; Class; Class = Class->GetSuperClass() )
+		if( appStricmp( Class->GetName(), Name ) == 0 )
+			return 1;
+	return 0;
+}
+
 // A key pressed and let go, as a bound key would be.
 static void TapKey( USDLViewport* Viewport, EInputKey Key )
 {
@@ -157,8 +169,14 @@ void USDLViewport::IOSTouchFrame( UBOOL InMenu )
 	FStateFrame* ConsoleState = Console ? Console->GetStateFrame() : NULL;
 	UBOOL ConsoleOpen = Console && Console->IsA(UConsole::StaticClass())
 		&& (((UConsole*)Console)->bTyping || (ConsoleState && ConsoleState->StateNode && ConsoleState->StateNode->GetFName() == NAME_ConsoleVisible));
+	// The intros (CinematicPlayer): no controls, and a tap skips to the menu as a click would.
+	static DWORD TapsSeen = 0;
+	UBOOL Intro = PC && IsClassNamed( PC, TEXT("CinematicPlayer") );
+	if( Intro && !InMenu && GIOSScreenTaps != TapsSeen )
+		Exec( TEXT("SHOWMENU"), *GLog );
+	TapsSeen = GIOSScreenTaps;
 	int Mode = IOSTOUCH_HIDDEN;
-	if( !InMenu && PC && Client->Window )
+	if( !InMenu && !Intro && PC && Client->Window )
 	{
 		static FName Dead( TEXT("Dead") ), Waiting( TEXT("PlayerWaiting") ), Spectating( TEXT("Spectating") ), WaitingForPawn( TEXT("WaitingForPawn") );
 		UBOOL Playing = Pawn || InState(PC, Dead) || InState(PC, Waiting) || InState(PC, Spectating) || InState(PC, WaitingForPawn);

@@ -1085,6 +1085,10 @@ void USDLViewport::KeyEvent( const SDL_KeyboardEvent& Event )
 		Client->Engine->Key( this, (EInputKey)(Key - IK_A + 1), Key - IK_A + 1 );
 }
 
+#if __IOS__
+extern DWORD GIOSScreenTaps;
+#endif
+
 void USDLViewport::MouseButtonEvent( const SDL_MouseButtonEvent& Event, UBOOL InMenu, FLOAT& DX, FLOAT& DY )
 {
 	static const EInputKey MouseButtons[] = { IK_None, IK_LeftMouse, IK_MiddleMouse, IK_RightMouse, IK_Mouse4, IK_Mouse5, IK_Mouse6, IK_Mouse7, IK_Mouse8 };
@@ -1092,6 +1096,11 @@ void USDLViewport::MouseButtonEvent( const SDL_MouseButtonEvent& Event, UBOOL In
 	// Touch and pen arrive as fingers too. VJShown follows a frame later, VirtualPad at once.
 	if( VJShown && USDLClient::VirtualPad && Event.which != SDL_TOUCH_MOUSEID && Event.which != SDL_PEN_MOUSEID )
 		SwitchVirtualJoystick( 0 );
+#if __IOS__
+	// The intro's tap to skip (IOSTouchFrame).
+	if( Event.which == SDL_TOUCH_MOUSEID && Event.type == SDL_EVENT_MOUSE_BUTTON_UP )
+		GIOSScreenTaps++;
+#endif
 	if( Event.which == SDL_TOUCH_MOUSEID && Event.button == SDL_BUTTON_LEFT )
 	{
 		if( InMenu && Event.type == SDL_EVENT_MOUSE_BUTTON_DOWN )
