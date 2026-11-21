@@ -482,6 +482,12 @@ class UOpenGLRenderDevice : public URenderDevice
 	PFNGLDRAWELEMENTSBASEVERTEXOESPROC	DrawElementsBaseVertex;
 	FOpenGLDynamicBuffer	DynamicVertexBuffer,
 						DynamicIndexBuffer;
+#ifdef SDL_PLATFORM_IOS
+	// Apple's OpenGL ES waits for the GPU when a buffer it still reads is rewritten (gldFinishObject),
+	// which froze iPhones for seconds a frame: each change of the scene block goes into a fresh slice.
+	FOpenGLDynamicBuffer	SceneRing;
+	GLint					UniformAlignment;
+#endif
 
 	// The world is drawn into World, scaled by ResolutionScale, and post processed into Scene. Scene then goes to the window.
 	FOpenGLFramebuffer	Scene,

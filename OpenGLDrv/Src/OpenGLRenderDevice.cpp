@@ -10,6 +10,10 @@ UOpenGLRenderDevice::UOpenGLRenderDevice()
 :	RenderInterface(this)
 ,	DynamicVertexBuffer(GL_ARRAY_BUFFER)
 ,	DynamicIndexBuffer(GL_ELEMENT_ARRAY_BUFFER)
+#ifdef SDL_PLATFORM_IOS
+,	SceneRing(GL_UNIFORM_BUFFER)
+,	UniformAlignment(256)
+#endif
 {
 	LockedViewport	= NULL;
 	ContextReady	= 0;
@@ -323,6 +327,10 @@ UBOOL UOpenGLRenderDevice::InitContext()
 	glBindBuffer(GL_UNIFORM_BUFFER,SceneBuffer);
 	glBufferData(GL_UNIFORM_BUFFER,sizeof(FOpenGLSceneBlock),NULL,GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_UNIFORM_BUFFER,0,SceneBuffer);
+#ifdef SDL_PLATFORM_IOS
+	glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT,&UniformAlignment);
+	UniformAlignment = Max<GLint>(UniformAlignment,16);
+#endif
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT,1);
 	glPixelStorei(GL_PACK_ALIGNMENT,1);
@@ -486,6 +494,9 @@ void UOpenGLRenderDevice::ReleaseObjects()
 	DestroyFramebuffer(Overlay);
 	DynamicVertexBuffer.Release();
 	DynamicIndexBuffer.Release();
+#ifdef SDL_PLATFORM_IOS
+	SceneRing.Release();
+#endif
 	if( QuadIndices )			glDeleteBuffers(1,&QuadIndices);
 	if( SceneBuffer )			glDeleteBuffers(1,&SceneBuffer);
 	if( VertexArray )			glDeleteVertexArrays(1,&VertexArray);

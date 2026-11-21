@@ -139,16 +139,18 @@ static int SDLCALL RunWatchdog(void*)
     {
         SDL_Delay(1000);
         Uint32 Last = SDL_GetAtomicU32(&FrameTicks), Now = (Uint32)SDL_GetTicks();
-        if (!Last || Now - Last < 5000 || SDL_GetAtomicInt(&InBackground))
+        // Signed: a frame that started this very millisecond reads as just ahead of now.
+        Sint32 Since = (Sint32)(Now - Last);
+        if (!Last || Since < 5000 || SDL_GetAtomicInt(&InBackground))
             continue;
         // Once 5 s into a stall and again at 20 s, to tell a stall that moves from one that doesn't.
         if (Reported != Last)
             Reported = Last, Times = 0;
-        if (Times == 2 || (Times == 1 && Now - Last < 20000))
+        if (Times == 2 || (Times == 1 && Since < 20000))
             continue;
         Times++;
         char Line[160];
-        SDL_snprintf(Line, sizeof(Line), "No frame for %u ms (%u s after start), report %d:\n", Now - Last, Now / 1000, Times);
+        SDL_snprintf(Line, sizeof(Line), "No frame for %d ms (%u s after start), report %d:\n", (int)Since, Now / 1000, Times);
         WriteHang(Line);
         pthread_kill(MainThread, SIGUSR2);
     }
