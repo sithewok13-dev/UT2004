@@ -133,24 +133,26 @@ static void HangSignal(int)
 
 static int SDLCALL RunWatchdog(void*)
 {
-    Uint32 Reported = 0;
-    int Times = 0;
-    for (;;)
+    // A frame running over a second is sampled once a second while it lasts, which tells a
+    // slow frame (the samples differ) from a stuck one; at most 12 samples a launch.
+    Uint32 Sampled = 0;
+    Sint32 SampledAt = 0;
+    int Samples = 0;
+    while (Samples < 12)
     {
-        SDL_Delay(1000);
+        SDL_Delay(250);
         Uint32 Last = SDL_GetAtomicU32(&FrameTicks), Now = (Uint32)SDL_GetTicks();
         // Signed: a frame that started this very millisecond reads as just ahead of now.
         Sint32 Since = (Sint32)(Now - Last);
-        if (!Last || Since < 5000 || SDL_GetAtomicInt(&InBackground))
+        if (!Last || Since < 1000 || SDL_GetAtomicInt(&InBackground))
             continue;
-        // Once 5 s into a stall and again at 20 s, to tell a stall that moves from one that doesn't.
-        if (Reported != Last)
-            Reported = Last, Times = 0;
-        if (Times == 2 || (Times == 1 && Since < 20000))
+        if (Sampled == Last && Since - SampledAt < 1000)
             continue;
-        Times++;
+        Sampled = Last;
+        SampledAt = Since;
+        Samples++;
         char Line[160];
-        SDL_snprintf(Line, sizeof(Line), "No frame for %d ms (%u s after start), report %d:\n", (int)Since, Now / 1000, Times);
+        SDL_snprintf(Line, sizeof(Line), "Frame running for %d ms (%u s after start), sample %d:\n", (int)Since, Now / 1000, Samples);
         WriteHang(Line);
         pthread_kill(MainThread, SIGUSR2);
     }
@@ -176,7 +178,23 @@ static void StartWatchdog()
 void WaitWhileInBackground()
 {
     // Called at the start of every frame.
-    SDL_SetAtomicU32(&FrameTicks, (Uint32)SDL_GetTicks() | 1);
+    Uint32 Now = (Uint32)SDL_GetTicks();
+    Uint32 Previous = SDL_GetAtomicU32(&FrameTicks);
+    SDL_SetAtomicU32(&FrameTicks, Now | 1);
+    // Every 5 s the frame rate and the slowest frame go to the log: a picture that stops with the
+    // sound going on is either very slow frames or none at all.
+    static Uint32 PeriodStart = 0, Slowest = 0, Frames = 0;
+    if (Previous && (Sint32)(Now - Previous) > (Sint32)Slowest)
+        Slowest = Now - Previous;
+    Frames++;
+    if (!PeriodStart)
+        PeriodStart = Now;
+    else if (Now - PeriodStart >= 5000)
+    {
+        debugf(TEXT("iOS: %u frames in %u ms, slowest %u ms"), Frames, Now - PeriodStart, Slowest);
+        PeriodStart = Now;
+        Slowest = Frames = 0;
+    }
     if (!SDL_GetAtomicInt(&InBackground))
         return;
     if (SDL_GL_GetCurrentContext())
