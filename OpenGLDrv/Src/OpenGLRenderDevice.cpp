@@ -777,13 +777,20 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 		static GLsync GpuFence = NULL;
 		static DWORD GpuFenceSent = 0, PeriodStart = 0, Presents = 0, SwapFails = 0, LateGpu = 0, ErrorsLogged = 0;
 		static UBOOL SwapReported = 0, GpuReported = 0;
+		static GLenum LastError = 0;
 		DWORD Now = (DWORD)SDL_GetTicks();
 		GLenum Error = glGetError();
-		if( Error && ErrorsLogged < 20 )
+		if( Error && Error != LastError && ErrorsLogged < 20 )
 		{
 			ErrorsLogged++;
 			debugf(TEXT("iOS: GL error 0x%x before present %u"),Error,Presents);
 		}
+		LastError = Error;
+		// SDL presents whatever renderbuffer is bound, expecting its own still to be. A render target
+		// made mid-match (its depth) left another bound: every present failed with GL_INVALID_OPERATION
+		// from then on, the picture froze and the frames ran on unthrottled.
+		if( GLuint ViewRenderbuffer = (GLuint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0) )
+			glBindRenderbuffer(GL_RENDERBUFFER,ViewRenderbuffer);
 		if( !SDL_GL_SwapWindow(Window) )
 		{
 			SwapFails++;
