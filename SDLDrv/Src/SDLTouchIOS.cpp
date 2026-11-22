@@ -180,7 +180,9 @@ void USDLViewport::IOSTouchFrame( UBOOL InMenu )
 	{
 		static FName Dead( TEXT("Dead") ), Waiting( TEXT("PlayerWaiting") ), Spectating( TEXT("Spectating") ), WaitingForPawn( TEXT("WaitingForPawn") );
 		UBOOL Playing = Pawn || InState(PC, Dead) || InState(PC, Waiting) || InState(PC, Spectating) || InState(PC, WaitingForPawn);
-		if( ConsoleOpen )
+		if( PC->Level && PC->Level->LevelAction != LEVACT_None )
+			;	// loading, precaching, connecting: the loading screen, no controls
+		else if( ConsoleOpen )
 			Mode = IOSTOUCH_CONSOLE;
 		else if( PC->Level && PC->Level->Pauser )
 			Mode = IOSTOUCH_PAUSED;
