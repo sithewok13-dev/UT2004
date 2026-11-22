@@ -626,9 +626,13 @@ static bool InstallContent(const char* Root)
 	Startup.
 -----------------------------------------------------------------------------*/
 
+extern "C" void IOSAudio_PlayWhenSilent(void);
+
 bool IOSSetup()
 {
     SDL_AddEventWatch(WatchApp, NULL);
+    // Before OpenAL opens its device: the sound plays with the silent switch on.
+    IOSAudio_PlayWhenSilent();
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         return false;
     // Documents, so the inis, the log and the content can be reached with the Files app (UIFileSharingEnabled).

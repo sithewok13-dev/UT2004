@@ -769,7 +769,71 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 	}
 #endif
 
+#ifdef SDL_PLATFORM_IOS
+	// Freeze diagnostics: on a phone the picture stopped while the frames ran on, faster than before.
+	// That is either the present failing or the GPU no longer finishing work (a GPU fault ends
+	// the context's work without telling the CPU). Each goes to the log once, the rest every 5 s.
+	{
+		static GLsync GpuFence = NULL;
+		static DWORD GpuFenceSent = 0, PeriodStart = 0, Presents = 0, SwapFails = 0, LateGpu = 0, ErrorsLogged = 0;
+		static UBOOL SwapReported = 0, GpuReported = 0;
+		DWORD Now = (DWORD)SDL_GetTicks();
+		GLenum Error = glGetError();
+		if( Error && ErrorsLogged < 20 )
+		{
+			ErrorsLogged++;
+			debugf(TEXT("iOS: GL error 0x%x before present %u"),Error,Presents);
+		}
+		if( !SDL_GL_SwapWindow(Window) )
+		{
+			SwapFails++;
+			if( !SwapReported )
+			{
+				SwapReported = 1;
+				debugf(TEXT("iOS: present %u failed: %s"),Presents,appFromAnsi(SDL_GetError()));
+			}
+		}
+		Presents++;
+		if( GpuFence )
+		{
+			GLenum Status = glClientWaitSync(GpuFence,0,0);
+			if( Status == GL_ALREADY_SIGNALED || Status == GL_CONDITION_SATISFIED || Status == GL_WAIT_FAILED )
+			{
+				if( Status == GL_WAIT_FAILED )
+					debugf(TEXT("iOS: GPU fence wait failed, GL error 0x%x"),glGetError());
+				if( GpuReported )
+					debugf(TEXT("iOS: the GPU finished again after %u ms"),Now - GpuFenceSent);
+				glDeleteSync(GpuFence);
+				GpuFence = NULL;
+				GpuReported = 0;
+			}
+			else if( Now - GpuFenceSent > 1000 )
+			{
+				LateGpu++;
+				if( !GpuReported )
+				{
+					GpuReported = 1;
+					debugf(TEXT("iOS: the GPU has not finished present %u's frame after %u ms"),Presents,Now - GpuFenceSent);
+				}
+			}
+		}
+		if( !GpuFence )
+		{
+			GpuFence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+			GpuFenceSent = Now;
+		}
+		if( !PeriodStart )
+			PeriodStart = Now;
+		else if( Now - PeriodStart >= 5000 )
+		{
+			debugf(TEXT("iOS: %u presents, %u failed, %u with the GPU over a second behind, GL error 0x%x"),Presents,SwapFails,LateGpu,glGetError());
+			PeriodStart = Now;
+			Presents = SwapFails = LateGpu = 0;
+		}
+	}
+#else
 	SDL_GL_SwapWindow(Window);
+#endif
 
 	// Waiting for the previous frame keeps the driver from queueing more, each queued frame is input lag.
 	if( FrameFence )

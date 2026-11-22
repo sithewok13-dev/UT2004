@@ -5982,7 +5982,11 @@ int IOSTouch_Update(void *pSDLWindow, int iMode, const IOSTouchHud *pHud, unsign
 void IOSTouch_Hide(void)
 {
   @autoreleasepool {
-    if (_iMode != IOSTOUCH_HIDDEN) IOSTouch_SetMode(IOSTOUCH_HIDDEN);
+    if (_iMode != IOSTOUCH_HIDDEN) {
+      IOSTouch_SetMode(IOSTOUCH_HIDDEN);
+      // A loading game doesn't return to the run loop, which would show the change.
+      [CATransaction flush];
+    }
     IOSTouch_GyroRun(0); // no motion updates while loading or in the background
   }
 }
