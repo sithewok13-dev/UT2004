@@ -12,12 +12,16 @@ elseif(ANDROID)
   endif()
   # The static modules end up in that shared library.
   set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+elseif(IOS)
+  if(NOT UT_STATIC_LINK OR NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+    message(FATAL_ERROR "iOS needs UT_STATIC_LINK and arm64, apps can't load their own libraries: cmake --preset ios-arm64")
+  endif()
 elseif(EMSCRIPTEN)
   if(NOT UT_STATIC_LINK OR NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
     message(FATAL_ERROR "The web build is a single wasm32 module: cmake --preset web")
   endif()
 elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|i.86|aarch64")
-  message(FATAL_ERROR "Only Windows, x86, x64 or arm64 Linux, arm64 Android and the web are supported: cmake --preset win32|win64|linux64|linux32|android-arm64|web")
+  message(FATAL_ERROR "Only Windows, x86, x64 or arm64 Linux, arm64 Android, arm64 iOS and the web are supported: cmake --preset win32|win64|linux64|linux32|android-arm64|ios-arm64|web")
 endif()
 
 # Each build runs from its own game folder, so architectures don't overwrite each other and runtime
@@ -34,7 +38,7 @@ if(NOT EXISTS ${UT_SCRIPTS_DIR}/CacheRecords.ucl)
   file(COPY ${CMAKE_SOURCE_DIR}/System/CacheRecords.ucl DESTINATION ${UT_SCRIPTS_DIR})
 endif()
 # The game rewrites the ini it runs on, so development runs get their own copies of the tracked templates.
-if(NOT EMSCRIPTEN AND NOT ANDROID)
+if(NOT EMSCRIPTEN AND NOT ANDROID AND NOT IOS)
   foreach(ini Dev.ini DevUser.ini)
     if(NOT EXISTS ${UT_SYSTEM_DIR}/${ini})
       file(COPY ${CMAKE_SOURCE_DIR}/DevIni/${ini} DESTINATION ${UT_SYSTEM_DIR})
@@ -61,7 +65,7 @@ foreach(dir Help Web KarmaData)
 endforeach()
 # Dev.ini and the web page served from build/web read the content through this link.
 set(UT_ASSETS_DIR "$ENV{UT_ASSETS_DIR}" CACHE PATH "Content set for development runs, with the packages in src and the packed web files in build/web")
-if(UT_ASSETS_DIR AND NOT ANDROID)
+if(UT_ASSETS_DIR AND NOT ANDROID AND NOT IOS)
   ut_link(assets ${UT_ASSETS_DIR})
 endif()
 # The tracked script packages are copied, because the game writes CacheRecords.ucl next to them.
@@ -108,7 +112,7 @@ else()
     -fshort-wchar -fno-builtin-wcslen -fsigned-char -fno-strict-aliasing -fno-delete-null-pointer-checks -w
     $<$<CXX_COMPILER_ID:GNU>:$<$<COMPILE_LANGUAGE:CXX>:-fpermissive>>
     # Like MSVC, template bodies that use classes declared later in the header are checked at instantiation.
-    $<$<CXX_COMPILER_ID:Clang>:$<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing -Wno-register>>)
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:$<$<COMPILE_LANGUAGE:CXX>:-fdelayed-template-parsing -Wno-register>>)
   # The engine calls destructors explicitly and reuses the object (FArray in UArrayProperty::DestroyValue),
   # so the stores a destructor makes must not be optimized away. Newer Clang does the same optimization and accepts the flag.
   include(CheckCXXCompilerFlag)
@@ -119,12 +123,16 @@ else()
   # 32-bit stat fails with EOVERFLOW on large inode numbers (WSL drives, XFS) without 64-bit file offsets.
   target_compile_definitions(ut_common INTERFACE __LINUX_X86__ LINUX=1 __FILE_NOCASE=1 _FILE_OFFSET_BITS=64)
   find_package(Threads REQUIRED)
-  target_link_libraries(ut_common INTERFACE dl Threads::Threads)
+  target_link_libraries(ut_common INTERFACE ${CMAKE_DL_LIBS} Threads::Threads)
+  if(IOS)
+    # The Unix code paths apply, __IOS__ marks where an app on iOS differs.
+    target_compile_definitions(ut_common INTERFACE __IOS__=1)
+  endif()
   if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT EMSCRIPTEN)
     # x87 math loads maps three times slower. MSVC uses SSE2 for Win32 too.
     target_compile_options(ut_common INTERFACE -msse2 -mfpmath=sse)
   endif()
-  if(NOT ANDROID AND NOT EMSCRIPTEN)
+  if(NOT ANDROID AND NOT EMSCRIPTEN AND NOT IOS)
     # Ubuntu's GCC turns these on by itself, other distributions do not. The NDK always does.
     target_compile_options(ut_common INTERFACE -fstack-protector-strong)
     target_compile_options(ut_common INTERFACE $<$<NOT:$<CONFIG:Debug>>:-U_FORTIFY_SOURCE;-D_FORTIFY_SOURCE=2>)
@@ -157,6 +165,9 @@ function(ut_module name type)
     # SDLActivity loads the app as libmain.so and calls its SDL_main.
     add_library(${name} SHARED ${A_SOURCES})
     set(A_OUTPUT main)
+  elseif(IOS)
+    # iOS/CMakeLists.txt fills the bundle.
+    add_executable(${name} MACOSX_BUNDLE ${A_SOURCES})
   elseif(type STREQUAL "WIN32")
     add_executable(${name} WIN32 ${A_SOURCES})
   else()
@@ -198,12 +209,19 @@ function(ut_module name type)
 endfunction()
 
 find_package(ZLIB REQUIRED)
-if(WIN32 OR ANDROID OR EMSCRIPTEN)
+if(WIN32 OR ANDROID OR IOS OR EMSCRIPTEN)
   find_package(Vorbis CONFIG REQUIRED)
   if(ANDROID)
     find_package(OpenAL CONFIG REQUIRED)
     find_library(GLES_TARGET GLESv3 REQUIRED)
     find_package(LibLZMA REQUIRED)
+  elseif(IOS)
+    # OpenAL Soft is linked in, iOS apps can only load their own code as signed frameworks.
+    find_package(OpenAL CONFIG REQUIRED)
+    find_package(LibLZMA REQUIRED)
+    # Apple's OpenGL ES 3 implements the Khronos API, so the code builds against the Khronos headers like elsewhere.
+    find_path(GLES3_INCLUDE_DIR GLES3/gl3.h REQUIRED)
+    set(GLES_TARGET "-framework OpenGLES")
   elseif(WIN32)
     find_package(OpenAL CONFIG REQUIRED)
     find_package(unofficial-angle CONFIG REQUIRED)
@@ -256,7 +274,15 @@ add_subdirectory(Tools/NVTriStrip)
 # Static, but linked into Engine.so.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(metoolkit-karma)
-if(WIN32 OR EMSCRIPTEN)
+if(IOS)
+  # Apple's libc++ has floating point from_chars and to_chars only on recent systems, see iOS/karma/Numbers.h.
+  foreach(lib MeGlobals MeXML MeAssetDBXMLIO)
+    if(TARGET ${lib})
+      target_include_directories(${lib} BEFORE PRIVATE ${CMAKE_SOURCE_DIR}/iOS/karma)
+    endif()
+  endforeach()
+endif()
+if(WIN32 OR EMSCRIPTEN OR IOS)
   unset(CMAKE_POSITION_INDEPENDENT_CODE)
 else()
   # Kept on so the Linux executables are position independent on every distribution.
@@ -266,8 +292,8 @@ endif()
 
 set(UT_MODULES Core Engine Fire IpDrv UWeb Editor OpenGLDrv ALAudio
     XGame XInterface Onslaught SDLDrv SDLLaunch)
-# Nothing built for Android or the web runs on the host, so UCC is left out there.
-if(NOT ANDROID AND NOT EMSCRIPTEN)
+# Nothing built for Android, iOS or the web runs on the host, so UCC is left out there.
+if(NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN)
   list(APPEND UT_MODULES UCC)
 endif()
 # UTV2004 has its own copies of IpDrv's net driver classes, so it only works as a loaded module.
@@ -279,6 +305,10 @@ foreach(m ${UT_MODULES})
 endforeach()
 if(ANDROID)
   add_subdirectory(Android)
+  return()
+endif()
+if(IOS)
+  add_subdirectory(iOS)
   return()
 endif()
 if(EMSCRIPTEN)

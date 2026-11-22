@@ -606,8 +606,19 @@ void FOpenGLRenderInterface::Commit()
 	Scene.Ambient = FPlane(Ambient.X,Ambient.Y,Ambient.Z,NumLights);
 	if( !GL.Valid || appMemcmp(&Scene,&GL.Scene,sizeof(Scene)) != 0 )
 	{
+#ifdef SDL_PLATFORM_IOS
+		// A fresh slice each time: rewriting a block the GPU still reads makes Apple's driver wait for it.
+		INT Offset = 0;
+		if( BYTE* Dest = RenDev->SceneRing.Lock(sizeof(Scene),RenDev->UniformAlignment,Offset) )
+		{
+			appMemcpy(Dest,&Scene,sizeof(Scene));
+			RenDev->SceneRing.Unlock();
+			glBindBufferRange(GL_UNIFORM_BUFFER,0,RenDev->SceneRing.Buffer,Offset,sizeof(Scene));
+		}
+#else
 		glBindBuffer(GL_UNIFORM_BUFFER,RenDev->SceneBuffer);
 		glBufferSubData(GL_UNIFORM_BUFFER,0,sizeof(Scene),&Scene);
+#endif
 		GL.Scene = Scene;
 		GL.Valid = 1;
 	}

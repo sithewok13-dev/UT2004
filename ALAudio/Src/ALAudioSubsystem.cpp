@@ -190,7 +190,7 @@ void UALAudioSubsystem::Shutdown()
 			StreamManager = NULL;
 		}
 
-#if !__EMSCRIPTEN__
+#if !AL_LINKED
 		appFreeDllHandle( DLLHandle );
 #endif
 
@@ -257,7 +257,7 @@ UBOOL UALAudioSubsystem::Init()
 
 #if DYNAMIC_BIND
 	guard(DynamicBinding);
-#if !__EMSCRIPTEN__
+#if !AL_LINKED
 	// Find DLL's.
 	DLLHandle = appGetDllHandle( AL_DLL );
 	if( !DLLHandle )
@@ -970,8 +970,8 @@ void UALAudioSubsystem::FindProcs( UBOOL AllowExt )
 	guard(UALAudioSubsystem::FindProcs);
 	#define AL_EXT(name) if( AllowExt ) SUPPORTS##name = FindExt( TEXT(#name)+1, 0 );
 	#define ALC_EXT(name) if( AllowExt ) SUPPORTS##name = FindExt( TEXT(#name)+1, 1 );
-#if __EMSCRIPTEN__
-	// alGetProcAddress there needs a current context, which needs these functions first.
+#if AL_LINKED
+	// alGetProcAddress on the web needs a current context, which needs these functions first.
 	#define AL_PROC(ext,ret,func,parms) *(void**)&func = (void*)&::func;
 	#define ALC_PROC(ext,ret,func,parms) *(void**)&func = (void*)&::func;
 #else

@@ -17,7 +17,11 @@ Revision history:
 #pragma pack (push,8)
 
 // Emscripten's OpenAL is linked in, FindProcs takes the addresses of its functions.
-#if !__EMSCRIPTEN__
+// The web links Emscripten's OpenAL and iOS links OpenAL Soft, both bind its functions directly.
+#if __EMSCRIPTEN__ || __IOS__
+#define AL_LINKED 1
+#endif
+#if !AL_LINKED
 #define AL_NO_PROTOTYPES
 #define ALC_NO_PROTOTYPES
 #endif

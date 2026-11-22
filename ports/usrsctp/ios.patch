@@ -1,0 +1,75 @@
+diff --git a/usrsctplib/CMakeLists.txt b/usrsctplib/CMakeLists.txt
+index fe0abc4..0b47ab5 100644
+--- a/usrsctplib/CMakeLists.txt
++++ b/usrsctplib/CMakeLists.txt
+@@ -75,7 +75,7 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+ 	add_definitions(-D_GNU_SOURCE)
+ endif ()
+ 
+-if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
++if (CMAKE_SYSTEM_NAME MATCHES "Darwin|iOS")
+ 	add_definitions(-D__APPLE_USE_RFC_2292)
+ endif ()
+ 
+diff --git a/usrsctplib/user_recv_thread.c b/usrsctplib/user_recv_thread.c
+index bb436cd..c74ee52 100755
+--- a/usrsctplib/user_recv_thread.c
++++ b/usrsctplib/user_recv_thread.c
+@@ -56,7 +56,14 @@
+ #endif
+ #endif
+ #endif
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++/* The iOS SDK has no <net/route.h>, so iOS goes without watching address changes. */
++#if defined(__APPLE__)
++#include <TargetConditionals.h>
++#endif
++#if (defined(__APPLE__) && !TARGET_OS_IPHONE) || defined(__DragonFly__) || defined(__FreeBSD__)
++#define USRSCTP_ROUTE_SOCKET 1
++#endif
++#if defined(USRSCTP_ROUTE_SOCKET)
+ #include <net/route.h>
+ #endif
+ /* local macros and datatypes used to get IP addresses system independently */
+@@ -70,12 +77,12 @@ void recv_thread_destroy(void);
+ 
+ #define ROUNDUP(a, size) (((a) & ((size)-1)) ? (1 + ((a) | ((size)-1))) : (a))
+ 
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++#if defined(USRSCTP_ROUTE_SOCKET)
+ #define NEXT_SA(ap) ap = (struct sockaddr *) \
+ 	((caddr_t) ap + (ap->sa_len ? ROUNDUP(ap->sa_len, sizeof (uint32_t)) : sizeof(uint32_t)))
+ #endif
+ 
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++#if defined(USRSCTP_ROUTE_SOCKET)
+ static void
+ sctp_get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
+ {
+@@ -1109,7 +1116,7 @@ recv_thread_init(void)
+ #else
+ 	unsigned int timeout = SOCKET_TIMEOUT; /* Timeout in milliseconds */
+ #endif
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++#if defined(USRSCTP_ROUTE_SOCKET)
+ 	if (SCTP_BASE_VAR(userspace_route) == -1) {
+ 		if ((SCTP_BASE_VAR(userspace_route) = socket(AF_ROUTE, SOCK_RAW, 0)) == -1) {
+ 			SCTPDBG(SCTP_DEBUG_USR, "Can't create routing socket (errno = %d).\n", errno);
+@@ -1409,7 +1416,7 @@ recv_thread_init(void)
+ 		}
+ 	}
+ #endif
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++#if defined(USRSCTP_ROUTE_SOCKET)
+ #if defined(INET) || defined(INET6)
+ 	if (SCTP_BASE_VAR(userspace_route) != -1) {
+ 		int rc;
+@@ -1483,7 +1490,7 @@ recv_thread_init(void)
+ void
+ recv_thread_destroy(void)
+ {
+-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__)
++#if defined(USRSCTP_ROUTE_SOCKET)
+ #if defined(INET) || defined(INET6)
+ 	if (SCTP_BASE_VAR(userspace_route) != -1) {
+ 		close(SCTP_BASE_VAR(userspace_route));

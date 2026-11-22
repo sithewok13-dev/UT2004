@@ -1007,6 +1007,10 @@ void USDLViewport::UpdateCursor( UBOOL InMenu )
 	// UGameEngine::Tick releases and restores the grab for them.
 	// The on-screen controls show in game only, opening a menu lets go of them.
 	UBOOL ShowVJ = USDLClient::VirtualPad && !InMenu;
+#if __IOS__
+	// The iOS touch overlay takes the place of these controls (SDLTouchIOS.cpp).
+	ShowVJ = 0;
+#endif
 	if( bShowWindowsMouse != WindowsMouseShown || ShowVJ != VJShown )
 	{
 		WindowsMouseShown = bShowWindowsMouse;
@@ -1081,6 +1085,10 @@ void USDLViewport::KeyEvent( const SDL_KeyboardEvent& Event )
 		Client->Engine->Key( this, (EInputKey)(Key - IK_A + 1), Key - IK_A + 1 );
 }
 
+#if __IOS__
+extern DWORD GIOSScreenTaps;
+#endif
+
 void USDLViewport::MouseButtonEvent( const SDL_MouseButtonEvent& Event, UBOOL InMenu, FLOAT& DX, FLOAT& DY )
 {
 	static const EInputKey MouseButtons[] = { IK_None, IK_LeftMouse, IK_MiddleMouse, IK_RightMouse, IK_Mouse4, IK_Mouse5, IK_Mouse6, IK_Mouse7, IK_Mouse8 };
@@ -1088,6 +1096,11 @@ void USDLViewport::MouseButtonEvent( const SDL_MouseButtonEvent& Event, UBOOL In
 	// Touch and pen arrive as fingers too. VJShown follows a frame later, VirtualPad at once.
 	if( VJShown && USDLClient::VirtualPad && Event.which != SDL_TOUCH_MOUSEID && Event.which != SDL_PEN_MOUSEID )
 		SwitchVirtualJoystick( 0 );
+#if __IOS__
+	// The intro's tap to skip (IOSTouchFrame).
+	if( Event.which == SDL_TOUCH_MOUSEID && Event.type == SDL_EVENT_MOUSE_BUTTON_UP )
+		GIOSScreenTaps++;
+#endif
 	if( Event.which == SDL_TOUCH_MOUSEID && Event.button == SDL_BUTTON_LEFT )
 	{
 		if( InMenu && Event.type == SDL_EVENT_MOUSE_BUTTON_DOWN )
@@ -1262,6 +1275,9 @@ void USDLViewport::UpdateInput( UBOOL Reset, FLOAT DeltaSeconds )
 	UpdateGamepad( InMenu, DeltaSeconds );
 	UpdateCursor( InMenu );
 	UpdateTextInput( InMenu );
+#if __IOS__
+	IOSTouchFrame( InMenu );
+#endif
 
 	// Mouse movement management.
 	UBOOL MouseMoved = false;
@@ -1563,8 +1579,8 @@ UBOOL USDLViewport::ResizeViewport( DWORD NewBlitFlags, INT InNewX, INT InNewY, 
 	// Set new info.
 	BlitFlags = NewBlitFlags & ~BLIT_ParameterFlags;
 
-#ifdef __ANDROID__
-	// The launcher's splash window becomes the game window, Android has only one.
+#if defined(__ANDROID__) || defined(SDL_PLATFORM_IOS)
+	// The launcher's splash window becomes the game window, phones have only one.
 	if( !Client->Window )
 	{
 		SDL_Window** Windows = SDL_GetWindows( NULL );

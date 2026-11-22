@@ -66,9 +66,18 @@ static void SetupFirstRunPlayer()
 	cleanup!!
 -----------------------------------------------------------------------------*/
 
+#if __IOS__
+extern "C" void IOSTouch_Hide(void);
+#endif
+
 void UGameEngine::PaintProgress( AVignette* Vignette, FLOAT Progress )
 {
 	guard(PaintProgress);
+
+#if __IOS__
+	// No touch controls over the loading screen: the next frame brings them back.
+	IOSTouch_Hide();
+#endif
 
     if( !Client || Client->Viewports.Num()==0 )
         return;

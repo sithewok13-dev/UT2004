@@ -10,6 +10,10 @@ UOpenGLRenderDevice::UOpenGLRenderDevice()
 :	RenderInterface(this)
 ,	DynamicVertexBuffer(GL_ARRAY_BUFFER)
 ,	DynamicIndexBuffer(GL_ELEMENT_ARRAY_BUFFER)
+#ifdef SDL_PLATFORM_IOS
+,	SceneRing(GL_UNIFORM_BUFFER)
+,	UniformAlignment(256)
+#endif
 {
 	LockedViewport	= NULL;
 	ContextReady	= 0;
@@ -261,8 +265,21 @@ void UOpenGLRenderDevice::ResetStateCache()
 	appMemset(GL.Samplers,0xff,sizeof(GL.Samplers));
 }
 
+#ifdef SDL_PLATFORM_IOS
+// The framebuffer SDL's view drew into when the context was made, in case the window property lacks it.
+static GLint GIOSViewFramebuffer = 0;
+static INT GIOSFramesLogged = 0;
+#endif
+
 UBOOL UOpenGLRenderDevice::InitContext()
 {
+#ifdef SDL_PLATFORM_IOS
+	// Nothing of the engine's is bound yet, so this is SDL's.
+	glGetIntegerv(GL_FRAMEBUFFER_BINDING,&GIOSViewFramebuffer);
+	GIOSFramesLogged = 0;
+	debugf(TEXT("iOS: view framebuffer %i, window property %i"),GIOSViewFramebuffer,
+		(INT)SDL_GetNumberProperty(SDL_GetWindowProperties(SDL_GL_GetCurrentWindow()),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,-1));
+#endif
 	debugf(TEXT("GL_VENDOR     : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_VENDOR)));
 	debugf(TEXT("GL_RENDERER   : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_RENDERER)));
 	debugf(TEXT("GL_VERSION    : %s"),appFromAnsi((const ANSICHAR*)glGetString(GL_VERSION)));
@@ -310,6 +327,10 @@ UBOOL UOpenGLRenderDevice::InitContext()
 	glBindBuffer(GL_UNIFORM_BUFFER,SceneBuffer);
 	glBufferData(GL_UNIFORM_BUFFER,sizeof(FOpenGLSceneBlock),NULL,GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_UNIFORM_BUFFER,0,SceneBuffer);
+#ifdef SDL_PLATFORM_IOS
+	glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT,&UniformAlignment);
+	UniformAlignment = Max<GLint>(UniformAlignment,16);
+#endif
 
 	glPixelStorei(GL_UNPACK_ALIGNMENT,1);
 	glPixelStorei(GL_PACK_ALIGNMENT,1);
@@ -473,6 +494,9 @@ void UOpenGLRenderDevice::ReleaseObjects()
 	DestroyFramebuffer(Overlay);
 	DynamicVertexBuffer.Release();
 	DynamicIndexBuffer.Release();
+#ifdef SDL_PLATFORM_IOS
+	SceneRing.Release();
+#endif
 	if( QuadIndices )			glDeleteBuffers(1,&QuadIndices);
 	if( SceneBuffer )			glDeleteBuffers(1,&SceneBuffer);
 	if( VertexArray )			glDeleteVertexArrays(1,&VertexArray);
@@ -705,15 +729,118 @@ void UOpenGLRenderDevice::Present(UViewport* Viewport)
 
 	int Width = Scene.Width, Height = Scene.Height;
 	SDL_GetWindowSizeInPixels(Window,&Width,&Height);
+	// On iOS the window is a framebuffer object SDL made, there is no default one.
+	GLuint WindowFramebuffer = 0;
+#ifdef SDL_PLATFORM_IOS
+	WindowFramebuffer = (GLuint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_FRAMEBUFFER_NUMBER,0);
+	if( !WindowFramebuffer )
+		WindowFramebuffer = (GLuint)GIOSViewFramebuffer;
+#endif
 	// Depth is not needed past the frame and the copy covers the whole window.
-	GLenum DepthStencil = GL_DEPTH_STENCIL_ATTACHMENT, Color = GL_COLOR;
+	GLenum DepthStencil = GL_DEPTH_STENCIL_ATTACHMENT, Color = WindowFramebuffer ? GL_COLOR_ATTACHMENT0 : GL_COLOR;
 	glBindFramebuffer(GL_FRAMEBUFFER,Scene.Framebuffer);
 	glInvalidateFramebuffer(GL_FRAMEBUFFER,1,&DepthStencil);
-	glBindFramebuffer(GL_FRAMEBUFFER,0);
+	glBindFramebuffer(GL_FRAMEBUFFER,WindowFramebuffer);
 	glInvalidateFramebuffer(GL_FRAMEBUFFER,1,&Color);
-	DrawFullscreen(CopyProgram,0,Width,Height,Scene.Texture);
+	DrawFullscreen(CopyProgram,WindowFramebuffer,Width,Height,Scene.Texture);
 
+#ifdef SDL_PLATFORM_IOS
+	if( GIOSFramesLogged < 3 )
+	{
+		GIOSFramesLogged++;
+		glBindFramebuffer(GL_FRAMEBUFFER,WindowFramebuffer);
+		GLint RenderbufferWidth = 0, RenderbufferHeight = 0;
+		glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,&RenderbufferWidth);
+		GLint Type = RenderbufferWidth;
+		RenderbufferWidth = 0;
+		GLint Renderbuffer = (GLint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0);
+		if( Renderbuffer )
+		{
+			glBindRenderbuffer(GL_RENDERBUFFER,Renderbuffer);
+			glGetRenderbufferParameteriv(GL_RENDERBUFFER,GL_RENDERBUFFER_WIDTH,&RenderbufferWidth);
+			glGetRenderbufferParameteriv(GL_RENDERBUFFER,GL_RENDERBUFFER_HEIGHT,&RenderbufferHeight);
+		}
+		int PointsX = 0, PointsY = 0;
+		SDL_GetWindowSize(Window,&PointsX,&PointsY);
+		debugf(TEXT("iOS: present %i into framebuffer %i (status 0x%x, attachment type 0x%x, renderbuffer %i at %ix%i), window %ix%i pixels %ix%i points, scene %ix%i, flags 0x%x, GL error 0x%x"),
+			GIOSFramesLogged,WindowFramebuffer,glCheckFramebufferStatus(GL_FRAMEBUFFER),Type,Renderbuffer,RenderbufferWidth,RenderbufferHeight,
+			Width,Height,PointsX,PointsY,Scene.Width,Scene.Height,(DWORD)SDL_GetWindowFlags(Window),glGetError());
+		GL.Framebuffer = WindowFramebuffer;
+	}
+#endif
+
+#ifdef SDL_PLATFORM_IOS
+	// Freeze diagnostics: on a phone the picture stopped while the frames ran on, faster than before.
+	// That is either the present failing or the GPU no longer finishing work (a GPU fault ends
+	// the context's work without telling the CPU). Each goes to the log once, the rest every 5 s.
+	{
+		static GLsync GpuFence = NULL;
+		static DWORD GpuFenceSent = 0, PeriodStart = 0, Presents = 0, SwapFails = 0, LateGpu = 0, ErrorsLogged = 0;
+		static UBOOL SwapReported = 0, GpuReported = 0;
+		static GLenum LastError = 0;
+		DWORD Now = (DWORD)SDL_GetTicks();
+		GLenum Error = glGetError();
+		if( Error && Error != LastError && ErrorsLogged < 20 )
+		{
+			ErrorsLogged++;
+			debugf(TEXT("iOS: GL error 0x%x before present %u"),Error,Presents);
+		}
+		LastError = Error;
+		// SDL presents whatever renderbuffer is bound, expecting its own still to be. A render target
+		// made mid-match (its depth) left another bound: every present failed with GL_INVALID_OPERATION
+		// from then on, the picture froze and the frames ran on unthrottled.
+		if( GLuint ViewRenderbuffer = (GLuint)SDL_GetNumberProperty(SDL_GetWindowProperties(Window),SDL_PROP_WINDOW_UIKIT_OPENGL_RENDERBUFFER_NUMBER,0) )
+			glBindRenderbuffer(GL_RENDERBUFFER,ViewRenderbuffer);
+		if( !SDL_GL_SwapWindow(Window) )
+		{
+			SwapFails++;
+			if( !SwapReported )
+			{
+				SwapReported = 1;
+				debugf(TEXT("iOS: present %u failed: %s"),Presents,appFromAnsi(SDL_GetError()));
+			}
+		}
+		Presents++;
+		if( GpuFence )
+		{
+			GLenum Status = glClientWaitSync(GpuFence,0,0);
+			if( Status == GL_ALREADY_SIGNALED || Status == GL_CONDITION_SATISFIED || Status == GL_WAIT_FAILED )
+			{
+				if( Status == GL_WAIT_FAILED )
+					debugf(TEXT("iOS: GPU fence wait failed, GL error 0x%x"),glGetError());
+				if( GpuReported )
+					debugf(TEXT("iOS: the GPU finished again after %u ms"),Now - GpuFenceSent);
+				glDeleteSync(GpuFence);
+				GpuFence = NULL;
+				GpuReported = 0;
+			}
+			else if( Now - GpuFenceSent > 1000 )
+			{
+				LateGpu++;
+				if( !GpuReported )
+				{
+					GpuReported = 1;
+					debugf(TEXT("iOS: the GPU has not finished present %u's frame after %u ms"),Presents,Now - GpuFenceSent);
+				}
+			}
+		}
+		if( !GpuFence )
+		{
+			GpuFence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+			GpuFenceSent = Now;
+		}
+		if( !PeriodStart )
+			PeriodStart = Now;
+		else if( Now - PeriodStart >= 5000 )
+		{
+			debugf(TEXT("iOS: %u presents, %u failed, %u with the GPU over a second behind, GL error 0x%x"),Presents,SwapFails,LateGpu,glGetError());
+			PeriodStart = Now;
+			Presents = SwapFails = LateGpu = 0;
+		}
+	}
+#else
 	SDL_GL_SwapWindow(Window);
+#endif
 
 	// Waiting for the previous frame keeps the driver from queueing more, each queued frame is input lag.
 	if( FrameFence )

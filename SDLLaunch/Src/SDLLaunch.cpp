@@ -85,7 +85,7 @@ FFileManagerUnix FileManager;
 #include <SDL3/SDL.h>
 #pragma pack(pop)
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || __IOS__
 static void ExitSplash(void) {}
 #elif __EMSCRIPTEN__
 // The page shows the loading progress, and a 2D context would keep SDLDrv from getting WebGL on the same canvas.
@@ -130,7 +130,7 @@ static void ExitSplash(void)
 }
 #endif
 
-#if defined(__ANDROID__) || __EMSCRIPTEN__
+#if defined(__ANDROID__) || __IOS__ || __EMSCRIPTEN__
 static void InitServerTray(void) {}
 static void PumpServerTray(void) {}
 static void ExitServerTray(void) {}
@@ -328,7 +328,7 @@ extern "C" int ut_next_frame();
 extern "C" void ut_exit(const char* ServerCmd);
 #endif
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || __IOS__
 #pragma pack(push,8)
 #include <SDL3/SDL_main.h>
 #pragma pack(pop)
@@ -416,6 +416,12 @@ inline void	CMainLoop::RunLoop(void)
 	if( Finished() ) 
 		return;
 
+#if __IOS__
+	WaitWhileInBackground();
+	if( Finished() )
+		return;
+#endif
+
 	// Clear stats (will also update old stats).
 	GStats.Clear();
 
@@ -489,7 +495,12 @@ inline void	CMainLoop::RunLoop(void)
 			// Sleep alone wakes up to a millisecond late.
 			DOUBLE Delta = 1.0 / MaxTickRate - (appSeconds() - OldTime);
 			if( Delta > 0.0 )
+#if __IOS__
+				// A sleep would hold the touches back, see UnIOS.cpp.
+				appSleep( (FLOAT)Delta );
+#else
 				SDL_DelayPrecise( (Uint64)(Delta * 1000000000.0) );
+#endif
 		}
 	}
 #endif
@@ -764,6 +775,16 @@ int main(int argc, char **argv)
 	SDL_snprintf( SystemDir, sizeof(SystemDir), "%s/UT2004/System", Root );
 	if( chdir(SystemDir) != 0 )
 		return AndroidFail( "Couldn't open %s.", SystemDir ), 1;
+#elif __IOS__
+	SDL_SetHint( SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight" );
+	// Mouse clicks would arrive as fingers too and bring the on-screen controls back.
+	SDL_SetHint( SDL_HINT_MOUSE_TOUCH_EVENTS, "0" );
+	// The setup and splash screens draw with OpenGL ES, as SDLDrv puts its GL context on the same window afterwards.
+	SDL_SetHint( SDL_HINT_RENDER_DRIVER, "opengles2" );
+	// A swipe from the bottom edge first only shows the home indicator, so the game isn't left by accident.
+	SDL_SetHint( SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2" );
+	if( !IOSSetup() )
+		return 1;
 #elif __EMSCRIPTEN__
 	// The system package and Emscripten/index.html lay the files out like a build folder.
 	chdir( "/System" );
@@ -786,6 +807,11 @@ int main(int argc, char **argv)
     		appStrcat(CmdLine, appFromAnsi(argv[i]));
     	}
     }
+#endif
+#if __IOS__
+	// The home screen starts apps without arguments. Android's activity passes the same ones.
+	if( !CmdLine[0] )
+		appStrcpy( CmdLine, TEXT("-nohomedir -VIRTUALJOYSTICK") );
 #endif
 	return RunEngine( CmdLine );
 }
